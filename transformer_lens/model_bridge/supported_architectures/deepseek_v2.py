@@ -1,7 +1,9 @@
 """DeepSeek V2 architecture adapter.
 
-Supports DeepSeek-V2, DeepSeek-V2-Lite, and DeepSeek-Coder-V2 models
-(all use DeepseekV2ForCausalLM).
+Maps DeepseekV2ForCausalLM: DeepSeek-V2, DeepSeek-V2-Lite, and DeepSeek-Coder-V2.
+No checkpoint of this class has passed verify_models; coverage is the randomly
+initialised models in the integration tests. Compatibility-mode weight processing
+is unverified: no weight conversions are declared.
 
 Key features:
 - Multi-Head Latent Attention (MLA): Q and KV compressed via LoRA-style projections.

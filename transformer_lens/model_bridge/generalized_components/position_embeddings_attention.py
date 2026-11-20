@@ -27,6 +27,33 @@ from transformer_lens.model_bridge.generalized_components.position_embedding_hoo
 # Uses WeakValueDictionary to avoid preventing garbage collection of bridges
 _ATTENTION_BRIDGE_REGISTRY: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
 
+
+def _rotate_adjacent_pairs(x: torch.Tensor) -> torch.Tensor:
+    """Map each adjacent pair [x0, x1] to [-x1, x0] along the last dim."""
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
+
+
+def _apply_rotary_pos_emb_adjacent_pairs(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """RoPE for models whose cos/sin are built with repeat_interleave (Cohere).
+
+    Llama's helper pairs dim i with dim i + d/2; applying it to interleaved
+    cos/sin is not a rotation and silently diverges from HF past position 0.
+    Rotation runs in fp32 and casts back, as HF's Cohere helper does.
+    """
+    dtype = q.dtype
+    q = q.float()
+    k = k.float()
+    cos = cos.unsqueeze(1)
+    sin = sin.unsqueeze(1)
+    q_embed = (q * cos) + (_rotate_adjacent_pairs(q) * sin)
+    k_embed = (k * cos) + (_rotate_adjacent_pairs(k) * sin)
+    return q_embed.to(dtype=dtype), k_embed.to(dtype=dtype)
+
+
 # Track whether we've already wrapped eager_attention_forward
 _EAGER_ATTENTION_WRAPPED = False
 
@@ -384,7 +411,15 @@ class PositionEmbeddingsAttentionBridge(PositionEmbeddingHooksMixin, AttentionBr
         if position_embeddings is not None:
             position_embeddings = self._apply_position_embedding_hooks(position_embeddings)
             cos, sin = position_embeddings
-            from transformers.models.llama.modeling_llama import apply_rotary_pos_emb
+            apply_rotary_pos_emb: Callable[..., tuple[torch.Tensor, torch.Tensor]]
+            if bool(getattr(self.config, "rotary_adjacent_pairs", False)):
+                apply_rotary_pos_emb = _apply_rotary_pos_emb_adjacent_pairs
+            else:
+                from transformers.models.llama.modeling_llama import (
+                    apply_rotary_pos_emb as _llama_apply_rotary_pos_emb,
+                )
+
+                apply_rotary_pos_emb = _llama_apply_rotary_pos_emb
 
             # Some models use partial rotary (e.g., GPT-OSS) where cos/sin cover only
             # a portion of head_dim. Split Q/K, rotate the partial dims, recombine.

@@ -6,11 +6,15 @@ Model: trl-internal-testing/tiny-CohereForCausalLM
   - logit_scale=0.125 (canonical Command-R is 0.0625; tiny diverges so
     regression tests catch silent-fallback bugs in the passthrough)
 
-NOTE: The tiny model has use_qk_norm=False, so QK-norm is not exercised here.
-Cohere's QK-norm is a per-head LayerNorm inside CohereAttention.forward; it is
-handled via HF delegation (PositionEmbeddingsAttentionBridge calls the original
-CohereAttention.forward directly), so functional correctness for that path relies
-on the same delegation mechanism verified in test_forward_matches_hf.
+NOTE: The tiny model has use_qk_norm=False, so QK-norm is not exercised here, and
+it is not supported: PositionEmbeddingsAttentionBridge reimplements attention and
+the adapter declares no q_norm/k_norm, so use_qk_norm=True checkpoints (e.g.
+Command R+) raise at load.
+
+NOTE: This checkpoint is initialised at std=0.02, so its attention patterns are
+near-uniform and logit parity here is insensitive to the RoPE convention. The
+position-sensitive parity check lives in
+tests/acceptance/model_bridge/test_command_r.py.
 """
 
 from typing import Any

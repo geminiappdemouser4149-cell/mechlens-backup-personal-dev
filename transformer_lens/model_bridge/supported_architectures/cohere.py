@@ -7,7 +7,13 @@ Supports CohereForCausalLM models (Command-R family) with:
 - Gated SwiGLU MLP (gate_proj, up_proj, down_proj)
 - Logit scaling: output logits multiplied by config.logit_scale (default 1/16)
 - Tied embed/unembed weights by default (tie_word_embeddings=True)
-- Interleaved RoPE via CohereRotaryEmbedding (delegated to HF module)
+- Interleaved RoPE: cos/sin come from HF's CohereRotaryEmbedding; the rotation
+  itself is reimplemented by the attention bridge in adjacent-pair form
+  (cfg.rotary_adjacent_pairs=True)
+
+Not supported: use_qk_norm=True checkpoints (e.g. Command R+). The attention
+bridge reimplements forward and has no per-head [n_heads, head_dim] LayerNorm
+path, so those models fail loudly at load rather than run without the norm.
 """
 
 from typing import Any
@@ -37,7 +43,8 @@ class CohereArchitectureAdapter(ArchitectureAdapter):
       It has a weight parameter but NO bias parameter.
     - Logit scale: CohereForCausalLM.forward multiplies logits by logit_scale
       (default 0.0625 = 1/16). Folded into unembed.weight via preprocess_weights.
-    - Rotary embeddings use repeat_interleave instead of cat-split (delegated to HF).
+    - Rotary embeddings use repeat_interleave instead of cat-split, so Q/K must be
+      rotated in adjacent pairs (cfg.rotary_adjacent_pairs=True), not Llama-style.
 
     Optional parameters (absent from state_dict by default):
     - blocks.{i}.attn.b_Q/b_K/b_V/b_O — no bias on projections (attention_bias=False)
@@ -59,6 +66,9 @@ class CohereArchitectureAdapter(ArchitectureAdapter):
 
         # --- Position embeddings and MLP ---
         self.cfg.positional_embedding_type = "rotary"
+        # Cohere rotates (x[2i], x[2i+1]); Llama's (x[i], x[i+d/2]) pairing gives
+        # wrong attention scores at every position past 0.
+        self.cfg.rotary_adjacent_pairs = True
         self.cfg.gated_mlp = True
         self.cfg.attn_only = False
 
@@ -92,7 +102,7 @@ class CohereArchitectureAdapter(ArchitectureAdapter):
         # logit_scale is not a declared field on TransformerBridgeConfig; it is a
         # Cohere-specific dynamic attribute accessed later in preprocess_weights.
         _ls = getattr(cfg, "logit_scale", None)
-        self.cfg.logit_scale = float(_ls) if _ls is not None else 0.0625  # type: ignore[attr-defined]
+        setattr(self.cfg, "logit_scale", float(_ls) if _ls is not None else 0.0625)
 
         # --- RoPE theta (informational metadata) ---
         # CohereRotaryEmbedding reads config.rope_parameters["rope_theta"] directly;
@@ -109,8 +119,8 @@ class CohereArchitectureAdapter(ArchitectureAdapter):
         # Block structure follows Falcon's parallel_attn=True, num_ln_in_parallel_attn=1
         # mode: single ln1 feeds both attn and MLP; NO ln2.
         # Submodule shapes follow Llama: separate q/k/v/o projections and SwiGLU MLP.
-        # Rotary and attention both delegate to HF modules, preserving Cohere's
-        # repeat_interleave RoPE convention without re-implementing it in TL.
+        # cos/sin are delegated to HF's CohereRotaryEmbedding; the attention bridge
+        # reimplements the forward pass and applies them in adjacent-pair form.
         self.component_mapping = {
             # Embedding: model.embed_tokens (same root as Llama, not transformer.* like Falcon)
             "embed": EmbeddingBridge(name="model.embed_tokens"),
@@ -139,8 +149,6 @@ class CohereArchitectureAdapter(ArchitectureAdapter):
                         requires_position_embeddings=True,
                     ),
                     # GatedMLPBridge: gate/in/out matches Llama's gate_proj/up_proj/down_proj.
-                    # Optional use_qk_norm is handled transparently by HF's
-                    # CohereAttention.forward delegation (no extra submodules needed).
                     "mlp": GatedMLPBridge(
                         name="mlp",
                         config=self.cfg,
@@ -176,9 +184,8 @@ class CohereArchitectureAdapter(ArchitectureAdapter):
     def setup_component_testing(self, hf_model: Any, bridge_model: Any = None) -> None:
         """Set rotary embedding reference on attention bridges for component testing.
 
-        CohereRotaryEmbedding lives at hf_model.model.rotary_emb. The bridge
-        delegates to it directly, preserving the repeat_interleave RoPE convention
-        without re-implementing it in TL.
+        CohereRotaryEmbedding lives at hf_model.model.rotary_emb and supplies the
+        interleaved cos/sin that the attention bridge applies in adjacent pairs.
 
         Pattern matches llama.py and qwen2.py.
         """

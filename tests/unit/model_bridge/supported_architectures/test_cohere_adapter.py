@@ -72,6 +72,11 @@ class TestCohereAdapterConfig:
     def test_default_prepend_bos_is_true(self, adapter: CohereArchitectureAdapter) -> None:
         assert adapter.cfg.default_prepend_bos is True
 
+    def test_rotary_adjacent_pairs_is_true(self, adapter: CohereArchitectureAdapter) -> None:
+        # Cohere's cos/sin are repeat_interleave'd; Llama-style half-split pairing
+        # in the attention bridge would silently diverge from HF past position 0.
+        assert adapter.cfg.rotary_adjacent_pairs is True
+
     def test_rotary_base_extracted(self) -> None:
         cfg = _make_cfg(rope_parameters={"rope_theta": 80000.0, "rope_type": "default"})
         adapter = CohereArchitectureAdapter(cfg)

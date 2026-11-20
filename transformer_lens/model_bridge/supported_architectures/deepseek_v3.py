@@ -1,6 +1,10 @@
 """DeepSeek V3 architecture adapter.
 
-Supports DeepSeek V3 and DeepSeek-R1 models (both use DeepseekV3ForCausalLM).
+Maps DeepseekV3ForCausalLM: DeepSeek-V3 / V3.1 and the full-size DeepSeek-R1
+checkpoints. R1 distills are Llama / Qwen2 / Qwen3 models and use those adapters.
+Exercised on tiny random checkpoints only; no full-size checkpoint has been run
+through verify_models. Compatibility-mode weight processing is unverified: no
+weight conversions are declared.
 Key features:
 - Multi-Head Latent Attention (MLA): Q and KV compressed via LoRA-style projections
 - Mixture of Experts (MoE) with shared experts on most layers
@@ -27,7 +31,7 @@ from transformer_lens.model_bridge.generalized_components.base import (
 
 
 class DeepSeekV3ArchitectureAdapter(ArchitectureAdapter):
-    """Architecture adapter for DeepSeek V3 / R1 models.
+    """Architecture adapter for DeepSeek V3 and full-size R1 (not the R1 distills).
 
     Uses RMSNorm, MLA with compressed Q/KV projections, partial RoPE,
     MoE on most layers (dense MLP on first few), and no biases.

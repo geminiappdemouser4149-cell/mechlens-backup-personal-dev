@@ -347,7 +347,7 @@ class BlockBridge(GeneralizedComponent):
 
 
 class MLABlockBridge(BlockBridge):
-    """Block wrapping Multi-Head Latent Attention (DeepSeek V2/V3/R1).
+    """Block wrapping Multi-Head Latent Attention (DeepSeek V2/V3 and full-size R1).
 
     MLA has no standalone q/k/v projections — Q flows through compressed
     q_a_proj→q_a_layernorm→q_b_proj, and K/V share a joint kv_a_proj_with_mqa

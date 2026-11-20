@@ -235,6 +235,8 @@ Failure message names the missing set. (`INTENTIONAL_EXCLUDES` in the test handl
 | HF convention | Handled in | How |
 |---|---|---|
 | RoPE (rotary positional embeddings) | `llama.py`, `mistral.py`, `qwen2.py`+ | `RotaryEmbeddingBridge(name="model.rotary_emb")` + `cfg.positional_embedding_type = "rotary"` |
+| Interleaved RoPE (cos/sin built with `repeat_interleave`, pairs `(x[2i], x[2i+1])`) | `cohere.py` | `cfg.rotary_adjacent_pairs = True`; without it `PositionEmbeddingsAttentionBridge` applies Llama's half-split pairing and diverges from HF past position 0. Tiny std=0.02 Hub checkpoints do NOT expose this — test parity on a position-sensitive model |
+| Per-head QK LayerNorm (Cohere `use_qk_norm=True`, weight `[n_heads, head_dim]`, applied on `[B, S, H, D]` before the transpose) | **Not supported** | `cohere.py` declares no `q_norm`/`k_norm`, so Command R+ raises in `PositionEmbeddingsAttentionBridge.set_original_component` (after weights load). Supporting it needs a mean-subtracting norm bridge and a pre-transpose phase; the existing `post_reshape` phase would broadcast the weight over `[S, D]` |
 | GQA / MQA (`n_key_value_heads < n_heads`) | `llama.py`, `mistral.py`, `falcon.py`, `cohere.py` | Set `cfg.n_key_value_heads`; pass `n_kv_heads=` to `_qkvo_weight_conversions()` |
 | RMSNorm with offset | `gemma1.py`, `gemma2.py`, `gemma3.py` | `cfg.rmsnorm_uses_offset = True` + `ArithmeticTensorConversion(ADDITION, 1.0)` |
 | Standard LayerNorm | `gpt2.py`, `bloom.py` | `cfg.normalization_type = "LN"` |

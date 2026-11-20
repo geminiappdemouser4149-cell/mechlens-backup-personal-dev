@@ -805,7 +805,7 @@ class TransformerBridge(HookIntrospectionMixin, nn.Module):
         ``hook_v_input``, ``hook_attn_in``, and ``hook_mlp_in`` fire on the
         pre-norm residual. Carve-outs: post-norm architectures (OLMo 2,
         BERT-style) read the post-attention residual instead, and MLA blocks
-        (DeepSeek V2/V3/R1) do not expose the split-qkv aliases. ``hook_mlp_in``
+        (DeepSeek V2/V3 and full-size R1) do not expose the split-qkv aliases. ``hook_mlp_in``
         is gated on ``cfg.use_hook_mlp_in``; toggle it via
         :py:meth:`set_use_hook_mlp_in`.
 
