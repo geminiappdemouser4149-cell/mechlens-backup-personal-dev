@@ -97,6 +97,33 @@
       "since": "unreleased",
       "extra": "parallel attn/mlp; logit scale folded into unembed; bias-free LayerNorm; pending verification (#1124)",
       "scope": "use_qk_norm=false only (Command R, Aya); Command R+ not supported"
+    },
+    {
+      "name": "deepseek-v2",
+      "attention": "MLA",
+      "rope": "partial",
+      "tied": false,
+      "since": "unreleased",
+      "extra": "MoE with shared experts; dense MLP on first layers; V2-Lite has no Q compression; pending verification",
+      "scope": "DeepseekV2ForCausalLM (V2, V2-Lite, Coder-V2); no checkpoint has passed verification"
+    },
+    {
+      "name": "deepseek-v3",
+      "attention": "MLA",
+      "rope": "partial",
+      "tied": false,
+      "since": "unreleased",
+      "extra": "MoE with shared experts; dense MLP on first layers; pending verification",
+      "scope": "DeepseekV3ForCausalLM (V3, V3.1); only tiny random checkpoints verified"
+    },
+    {
+      "name": "deepseek-r1",
+      "attention": "MLA",
+      "rope": "partial",
+      "tied": false,
+      "since": "unreleased",
+      "extra": "loads through the deepseek-v3 adapter; pending verification",
+      "scope": "full-size R1 only, none run; R1 distills are llama / qwen models and use those families"
     }
   ]
 }
